@@ -4404,3 +4404,12 @@ EVP_PKEY_set1_engine                    4347	1_1_0g	EXIST::FUNCTION:ENGINE
 DH_new_by_nid                           4348	1_1_1	EXIST::FUNCTION:DH
 DH_get_nid                              4349	1_1_1	EXIST::FUNCTION:DH
 CRYPTO_get_alloc_counts                 4350	1_1_1	EXIST::FUNCTION:CRYPTO_MDEBUG
+SM4_encrypt                             4351	1_1_1	EXIST::FUNCTION:SM4
+SM4_decrypt                             4352	1_1_1	EXIST::FUNCTION:SM4
+SM4_set_key                             4353	1_1_1	EXIST::FUNCTION:SM4
+EVP_sm4_ecb                             4354	1_1_1	EXIST::FUNCTION:SM4
+EVP_sm4_cbc                             4355	1_1_1	EXIST::FUNCTION:SM4
+EVP_sm4_ofb                             4356	1_1_1	EXIST::FUNCTION:SM4
+EVP_sm4_cfb128                          4356	1_1_1	EXIST::FUNCTION:SM4
+EVP_sm4_ctr                             4357	1_1_1	EXIST::FUNCTION:SM4
+

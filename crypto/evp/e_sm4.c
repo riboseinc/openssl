@@ -88,7 +88,7 @@ static int sm4_ctr_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
 }
 
 static const EVP_CIPHER sm4_ctr_mode = {
-    NID_sm4_ctr, 16, 16, 16,
+    NID_sm4_ctr, 1, 16, 16,
     EVP_CIPH_CTR_MODE,
     sm4_init_key,
     sm4_ctr_cipher,

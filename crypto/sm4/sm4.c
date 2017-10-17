@@ -40,7 +40,7 @@ static const uint8_t SM4_S[256] = {
 /*
 * SM4_SBOX_T[j] == L(SM4_SBOX[j]).
 */
-const uint32_t SM4_SBOX_T[256] = {
+static const uint32_t SM4_SBOX_T[256] = {
    0x8ED55B5B, 0xD0924242, 0x4DEAA7A7, 0x06FDFBFB, 0xFCCF3333, 0x65E28787,
    0xC93DF4F4, 0x6BB5DEDE, 0x4E165858, 0x6EB4DADA, 0x44145050, 0xCAC10B0B,
    0x8828A0A0, 0x17F8EFEF, 0x9C2CB0B0, 0x11051414, 0x872BACAC, 0xFB669D9D,
@@ -120,14 +120,10 @@ static inline uint32_t SM4_T_slow(uint32_t X)
 
 static inline uint32_t SM4_T(uint32_t X)
 {
-//return SM4_T_slow(X);
-    uint32_t t = 0;
-    t ^= SM4_SBOX_T[(X >> 24) & 0xFF];
-    t ^= rotl(SM4_SBOX_T[(X >> 16) & 0xFF], 24);
-    t ^= rotl(SM4_SBOX_T[(X >> 8) & 0xFF], 16);
-    t ^= rotl(SM4_SBOX_T[X & 0xFF], 8);
-
-    return t;
+    return SM4_SBOX_T[(X >> 24) & 0xFF] ^
+           rotl(SM4_SBOX_T[(X >> 16) & 0xFF], 24) ^
+           rotl(SM4_SBOX_T[(X >> 8) & 0xFF], 16) ^
+           rotl(SM4_SBOX_T[X & 0xFF], 8);
 }
 
 int SM4_set_key(const uint8_t *key, SM4_KEY * ks)

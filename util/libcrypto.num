@@ -4426,3 +4426,6 @@ EVP_sm4_ofb                             4370	1_1_1	EXIST::FUNCTION:SM4
 EVP_sm4_ecb                             4371	1_1_1	EXIST::FUNCTION:SM4
 EVP_sm4_cfb128                          4372	1_1_1	EXIST::FUNCTION:SM4
 EVP_sm3                                 4373	1_1_1	EXIST::FUNCTION:SM3
+SM2_compute_za                          5000    1_1_1	EXIST::FUNCTION:SM2
+SM2_do_sign                             5001    1_1_1	EXIST::FUNCTION:SM2
+SM2_do_verify                           5002    1_1_1	EXIST::FUNCTION:SM2

@@ -1,0 +1,109 @@
+/*
+ * Copyright 2017 The OpenSSL Project Authors. All Rights Reserved.
+ *
+ * Licensed under the OpenSSL license (the "License").  You may not use
+ * this file except in compliance with the License.  You can obtain a copy
+ * in the file LICENSE in the source distribution or at
+ * https://www.openssl.org/source/license.html
+ */
+
+#include <openssl/sm2.h>
+#include <openssl/evp.h>
+#include <string.h>
+
+int SM2_compute_za(uint8_t *out,
+                   const EVP_MD *digest,
+                   const char *user_id,
+                   const EC_KEY *key)
+   {
+   int rc = 0;
+
+   const EC_GROUP *group = EC_KEY_get0_group(key);
+
+   BN_CTX* ctx = NULL; // ???
+
+   BIGNUM *p = BN_new();
+   BIGNUM *a = BN_new();
+   BIGNUM *b = BN_new();
+
+   BIGNUM *xG = BN_new();
+   BIGNUM *yG = BN_new();
+   BIGNUM *xA = BN_new();
+   BIGNUM *yA = BN_new();
+
+   const size_t p_bytes = BN_num_bytes(p);
+   uint8_t buf[p_bytes];
+
+   EVP_MD_CTX *hash = EVP_MD_CTX_new();
+
+   memset(out, 0, EVP_MD_size(digest));
+
+   if (EVP_DigestInit(hash, digest) == 0)
+      goto done;
+
+   /*
+   ZA=H256(ENTLA || IDA || a || b || xG || yG || xA || yA)
+   */
+
+   size_t uid_len = strlen(user_id);
+
+   if (uid_len >= 8192) /* too large */
+      goto done;
+
+   uint16_t entla = 8 * uid_len;
+
+   uint8_t e_byte = entla >> 8;
+   if (EVP_DigestUpdate(hash, &e_byte, 1) == 0)
+      goto done;
+   e_byte = entla & 0xFF;
+   if (EVP_DigestUpdate(hash, &e_byte, 1) == 0)
+      goto done;
+
+   if (EVP_DigestUpdate(hash, user_id, uid_len) == 0)
+      goto done;
+
+   if (EC_GROUP_get_curve_GFp(group, p, a, b, ctx) == 0)
+      goto done;
+
+   BN_bn2binpad(a, buf, p_bytes);
+   if (EVP_DigestUpdate(hash, buf, p_bytes) == 0)
+      goto done;
+   BN_bn2binpad(b, buf, p_bytes);
+   if (EVP_DigestUpdate(hash, buf, p_bytes) == 0)
+      goto done;
+   EC_POINT_get_affine_coordinates_GFp(group,
+                                       EC_GROUP_get0_generator(group),
+                                       xG, yG, ctx);
+   BN_bn2binpad(xG, buf, p_bytes);
+   if (EVP_DigestUpdate(hash, buf, p_bytes) == 0)
+      goto done;
+   BN_bn2binpad(yG, buf, p_bytes);
+   if (EVP_DigestUpdate(hash, buf, p_bytes) == 0)
+      goto done;
+
+   EC_POINT_get_affine_coordinates_GFp(group,
+                                       EC_KEY_get0_public_key(key),
+                                       xA, yA, ctx);
+   BN_bn2binpad(xA, buf, p_bytes);
+   if (EVP_DigestUpdate(hash, buf, p_bytes) == 0)
+      goto done;
+   BN_bn2binpad(yA, buf, p_bytes);
+   if (EVP_DigestUpdate(hash, buf, p_bytes) == 0)
+      goto done;
+
+   if (EVP_DigestFinal(hash, out, NULL) == 0)
+      goto done;
+
+   rc = 1;
+
+   done:
+   EVP_MD_CTX_free(hash);
+   BN_free(p);
+   BN_free(a);
+   BN_free(b);
+   BN_free(xA);
+   BN_free(yA);
+   BN_free(xG);
+   BN_free(yG);
+   return rc;
+   }

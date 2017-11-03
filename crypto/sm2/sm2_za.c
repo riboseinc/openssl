@@ -31,8 +31,8 @@ int SM2_compute_za(uint8_t *out,
    BIGNUM *xA = BN_new();
    BIGNUM *yA = BN_new();
 
-   const size_t p_bytes = BN_num_bytes(p);
-   uint8_t buf[p_bytes];
+   int p_bytes = 0;
+   uint8_t *buf = NULL;
 
    EVP_MD_CTX *hash = EVP_MD_CTX_new();
 
@@ -64,6 +64,9 @@ int SM2_compute_za(uint8_t *out,
 
    if (EC_GROUP_get_curve_GFp(group, p, a, b, ctx) == 0)
       goto done;
+
+   p_bytes = BN_num_bytes(p);
+   buf = malloc(p_bytes);
 
    BN_bn2binpad(a, buf, p_bytes);
    if (EVP_DigestUpdate(hash, buf, p_bytes) == 0)
@@ -97,6 +100,7 @@ int SM2_compute_za(uint8_t *out,
    rc = 1;
 
    done:
+   free(buf);
    EVP_MD_CTX_free(hash);
    BN_free(p);
    BN_free(a);

@@ -83,6 +83,9 @@ static EC_GROUP *create_EC_group(
    BN_hex2bn(&b, b_hex);
 
    EC_GROUP *group = EC_GROUP_new_curve_GFp(p, a, b, NULL);
+   BN_free(p);
+   BN_free(a);
+   BN_free(b);
 
    if(group == NULL)
       return NULL;
@@ -100,6 +103,9 @@ static EC_GROUP *create_EC_group(
    if(EC_POINT_set_affine_coordinates_GFp(group, generator, g_x, g_y, NULL) == 0)
       return NULL;
 
+   BN_free(g_x);
+   BN_free(g_y);
+
    BIGNUM* order = NULL;
    BIGNUM* cof = NULL;
    BN_hex2bn(&order, order_hex);
@@ -108,16 +114,19 @@ static EC_GROUP *create_EC_group(
    if(EC_GROUP_set_generator(group, generator, order, cof) == 0)
       return NULL;
 
+   EC_POINT_free(generator);
+   BN_free(order);
+   BN_free(cof);
+
    return group;
    }
 
 int test_sm2(const EC_GROUP* group,
-             const char* userid,
+             const EVP_MD* digest,
              const char* privkey_hex,
              const char* message,
              const char* k_hex,
-             const char* r_hex,
-             const char* s_hex)
+             const char* ctext_hex)
    {
    const size_t msg_len = strlen(message);
    BIGNUM* priv = NULL;
@@ -129,51 +138,45 @@ int test_sm2(const EC_GROUP* group,
 
    EC_POINT *pt = EC_POINT_new(group);
    EC_POINT_mul(group, pt, priv, NULL, NULL, NULL);
+
    EC_KEY_set_public_key(key, pt);
+   BN_free(priv);
+   EC_POINT_free(pt);
+
+   unsigned char *expected = OPENSSL_hexstr2buf(ctext_hex, NULL);
+
+   const size_t expected_len = SM2_ciphertext_size(key, digest, msg_len);
+   size_t ctext_len = expected_len;
+   uint8_t ctext[ctext_len];
+   uint8_t recovered[msg_len];
+   size_t recovered_len = msg_len;
 
    start_fake_rand(k_hex);
-   ECDSA_SIG* sig = SM2_do_sign(key, EVP_sm3(), userid, (const uint8_t*)message, msg_len);
+   int rc = SM2_encrypt(key, digest,
+                        (const uint8_t*)message, msg_len,
+                        ctext, &ctext_len);
    restore_rand();
 
-   if(sig == NULL)
+   TEST_int_eq(ctext_len, expected_len);
+
+   TEST_mem_eq(ctext, ctext_len, expected, expected_len);
+   OPENSSL_free(expected);
+   if(rc == 0)
       return 0;
 
-   const BIGNUM *sig_r;
-   const BIGNUM *sig_s;
-   ECDSA_SIG_get0(sig, &sig_r, &sig_s);
+   rc = SM2_decrypt(key, digest, ctext, ctext_len, recovered, &recovered_len);
 
-   BIGNUM* r = NULL;
-   BIGNUM* s = NULL;
-   BN_hex2bn(&r, r_hex);
-   BN_hex2bn(&s, s_hex);
-
-   if(BN_cmp(r, sig_r) != 0)
-      {
-      printf("Signature R mismatch: ");
-      BN_print_fp(stdout, r);
-      printf(" != ");
-      BN_print_fp(stdout, sig_r);
-      printf("\n");
+   TEST_int_eq(recovered_len, msg_len);
+   TEST_mem_eq(recovered, recovered_len, message, msg_len);
+   if(rc == 0)
       return 0;
-      }
-   if(BN_cmp(s, sig_s) != 0)
-      {
-      printf("Signature S mismatch: ");
-      BN_print_fp(stdout, s);
-      printf(" != ");
-      BN_print_fp(stdout, sig_s);
-      printf("\n");
-      return 0;
-      }
 
-   int ok = SM2_do_verify(key, EVP_sm3(), sig, userid, (const uint8_t*)message, msg_len);
-
-   return ok;
+   EC_KEY_free(key);
+   return 1;
    }
 
-static int sm2_sig_test(void)
+static int sm2_crypt_test(void)
 {
-    // From draft-shen-sm2-ecdsa-02
     EC_GROUP* test_group = create_EC_group(
                 "8542D69E4C044F18E8B92435BF6FF7DE457283915C45517D722EDB8B08F1DFC3",
                 "787968B4FA32C3FD2417842E73BBFEFF2F3C848B6831D7E0EC65228B3937E498",
@@ -187,14 +190,31 @@ static int sm2_sig_test(void)
        return 0;
 
     int rc = test_sm2(test_group,
-                      "ALICE123@YAHOO.COM",
-                      "128B2FA8BD433C6C068C8D803DFF79792A519A55171B1B650C23661D15897263",
-                      "message digest",
-                      "006CB28D99385C175C94F94E934817663FC176D925DD72B727260DBAAE1FB2F96F",
-                      "40F1EC59F793D9F49E09DCEF49130D4194F79FB1EED2CAA55BACDB49C4E755D1",
-                      "6FC6DAC32C5D5CF10C77DFB20F7C2EB667A457872FB09EC56327A67EC7DEEBE7");
+                      EVP_sm3(),
+                      "1649AB77A00637BD5E2EFE283FBF353534AA7F7CB89463F208DDBC2920BB0DA0",
+                      "encryption standard",
+                      "004C62EEFD6ECFC2B95B92FD6C3D9575148AFA17425546D49018E5388D49DD7B4F",
+                      "307B0220245C26FB68B1DDDDB12C4B6BF9F2B6D5FE60A383B0D18D1C4144ABF1"
+                      "7F6252E7022076CB9264C2A7E88E52B19903FDC47378F605E36811F5C07423A2"
+                      "4B84400F01B804209C3D7360C30156FAB7C80A0276712DA9D8094A634B766D3A"
+                      "285E07480653426D0413650053A89B41C418B0C3AAD00D886C00286467");
 
-    return rc;
+    if(rc == 0)
+       return 0;
+
+    // Same test as above except using SHA-256 instead of SM3
+    rc = test_sm2(test_group,
+                      EVP_sha256(),
+                      "1649AB77A00637BD5E2EFE283FBF353534AA7F7CB89463F208DDBC2920BB0DA0",
+                      "encryption standard",
+                      "004C62EEFD6ECFC2B95B92FD6C3D9575148AFA17425546D49018E5388D49DD7B4F",
+                      "307B0220245C26FB68B1DDDDB12C4B6BF9F2B6D5FE60A383B0D18D1C4144ABF17F6252E7022076CB9264C2A7E88E52B19903FDC47378F605E36811F5C07423A24B84400F01B80420BE89139D07853100EFA763F60CBE30099EA3DF7F8F364F9D10A5E988E3C5AAFC0413229E6C9AEE2BB92CAD649FE2C035689785DA33");
+    if(rc == 0)
+       return 0;
+
+    EC_GROUP_free(test_group);
+
+    return 1;
 }
 
 #endif
@@ -204,7 +224,7 @@ int setup_tests(void)
 #ifdef OPENSSL_NO_SM2
     TEST_note("SM2 is disabled.");
 #else
-    ADD_TEST(sm2_sig_test);
+    ADD_TEST(sm2_crypt_test);
 #endif
     return 1;
 }

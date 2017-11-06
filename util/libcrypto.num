@@ -4429,3 +4429,6 @@ EVP_sm3                                 4373	1_1_1	EXIST::FUNCTION:SM3
 SM2_compute_za                          5000    1_1_1	EXIST::FUNCTION:SM2
 SM2_do_sign                             5001    1_1_1	EXIST::FUNCTION:SM2
 SM2_do_verify                           5002    1_1_1	EXIST::FUNCTION:SM2
+SM2_ciphertext_size                     5003    1_1_1	EXIST::FUNCTION:SM2
+SM2_encrypt                             5004    1_1_1	EXIST::FUNCTION:SM2
+SM2_decrypt                             5005    1_1_1	EXIST::FUNCTION:SM2

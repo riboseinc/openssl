@@ -246,6 +246,11 @@ static const ERR_STRING_DATA EC_str_functs[] = {
     {ERR_PACK(ERR_LIB_EC, EC_F_PKEY_EC_KEYGEN, 0), "pkey_ec_keygen"},
     {ERR_PACK(ERR_LIB_EC, EC_F_PKEY_EC_PARAMGEN, 0), "pkey_ec_paramgen"},
     {ERR_PACK(ERR_LIB_EC, EC_F_PKEY_EC_SIGN, 0), "pkey_ec_sign"},
+    {ERR_PACK(ERR_LIB_EC, EC_F_PKEY_SM2_CTRL, 0), "pkey_sm2_ctrl"},
+    {ERR_PACK(ERR_LIB_EC, EC_F_PKEY_SM2_CTRL_STR, 0), "pkey_sm2_ctrl_str"},
+    {ERR_PACK(ERR_LIB_EC, EC_F_PKEY_SM2_KEYGEN, 0), "pkey_sm2_keygen"},
+    {ERR_PACK(ERR_LIB_EC, EC_F_PKEY_SM2_PARAMGEN, 0), "pkey_sm2_paramgen"},
+    {ERR_PACK(ERR_LIB_EC, EC_F_PKEY_SM2_SIGN, 0), "pkey_sm2_sign"},
     {0, NULL}
 };
 

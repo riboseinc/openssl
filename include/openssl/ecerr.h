@@ -172,6 +172,11 @@ int ERR_load_EC_strings(void);
 # define EC_F_PKEY_EC_KEYGEN                              199
 # define EC_F_PKEY_EC_PARAMGEN                            219
 # define EC_F_PKEY_EC_SIGN                                218
+# define EC_F_PKEY_SM2_CTRL                               274
+# define EC_F_PKEY_SM2_CTRL_STR                           275
+# define EC_F_PKEY_SM2_KEYGEN                             276
+# define EC_F_PKEY_SM2_PARAMGEN                           277
+# define EC_F_PKEY_SM2_SIGN                               278
 
 /*
  * EC reason codes.

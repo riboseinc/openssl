@@ -128,11 +128,6 @@ static int pkey_sm2_ctrl(EVP_PKEY_CTX *ctx, int type, int p1, void *p2)
         dctx->gen_group = group;
         return 1;
 
-    case EVP_PKEY_CTRL_SET_USERID:
-        free(dctx->user_id);
-        dctx->user_id = OPENSSL_strdup((const char*)p2);
-        return 1;
-
     case EVP_PKEY_CTRL_MD:
         {
         int md_type = EVP_MD_type((const EVP_MD *)p2);

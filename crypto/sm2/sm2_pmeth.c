@@ -8,7 +8,7 @@
  * https://www.openssl.org/source/license.html
  */
 
-#include <stdio.h>
+#include <openssl/sm2.h>
 #include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
@@ -19,16 +19,14 @@
 /* EC pkey context structure */
 
 typedef struct {
-    /* Key and paramgen group */
     EC_GROUP *gen_group;
-    /* message digest */
     const EVP_MD *md;
-    const char* user_id;
-} EC_PKEY_CTX;
+    char* user_id;
+} SM2_PKEY_CTX;
 
 static int pkey_sm2_init(EVP_PKEY_CTX *ctx)
 {
-    EC_PKEY_CTX *dctx;
+    SM2_PKEY_CTX *dctx;
 
     dctx = OPENSSL_zalloc(sizeof(*dctx));
     if (dctx == NULL)
@@ -40,7 +38,7 @@ static int pkey_sm2_init(EVP_PKEY_CTX *ctx)
 
 static int pkey_sm2_copy(EVP_PKEY_CTX *dst, EVP_PKEY_CTX *src)
 {
-    EC_PKEY_CTX *dctx, *sctx;
+    SM2_PKEY_CTX *dctx, *sctx;
     if (!pkey_sm2_init(dst))
         return 0;
     sctx = src->data;
@@ -56,7 +54,7 @@ static int pkey_sm2_copy(EVP_PKEY_CTX *dst, EVP_PKEY_CTX *src)
 
 static void pkey_sm2_cleanup(EVP_PKEY_CTX *ctx)
 {
-    EC_PKEY_CTX *dctx = ctx->data;
+    SM2_PKEY_CTX *dctx = ctx->data;
     if (dctx) {
         EC_GROUP_free(dctx->gen_group);
         OPENSSL_free(dctx);
@@ -66,12 +64,14 @@ static void pkey_sm2_cleanup(EVP_PKEY_CTX *ctx)
 static int pkey_sm2_sign(EVP_PKEY_CTX *ctx, unsigned char *sig, size_t *siglen,
                         const unsigned char *tbs, size_t tbslen)
 {
-    int ret, type;
-    unsigned int sltmp;
-    EC_PKEY_CTX *dctx = ctx->data;
+    SM2_PKEY_CTX *dctx = ctx->data;
     EC_KEY *ec = ctx->pkey->pkey.ec;
+    ECDSA_SIG* der_sig = NULL;
+    const EVP_MD* md = NULL;
+    const char* user_id = NULL;
 
     if (!sig) {
+        /* ECDSA and SM2 signatures have the same size */
         *siglen = ECDSA_size(ec);
         return 1;
     } else if (*siglen < (size_t)ECDSA_size(ec)) {
@@ -79,16 +79,19 @@ static int pkey_sm2_sign(EVP_PKEY_CTX *ctx, unsigned char *sig, size_t *siglen,
         return 0;
     }
 
-    if (dctx->md)
-        type = EVP_MD_type(dctx->md);
-    else
-        type = NID_sm3;
+    md = (dctx->md) ? dctx->md : EVP_sm3();
 
-    ret = ECDSA_sign(type, tbs, tbslen, sig, &sltmp, ec);
+    user_id = (dctx->user_id) ? dctx->user_id : SM2_DEFAULT_USERID;
 
-    if (ret <= 0)
-        return ret;
-    *siglen = (size_t)sltmp;
+    der_sig = SM2_do_sign(ec, md, user_id, tbs, tbslen);
+
+    if(der_sig == NULL)
+       return 0;
+
+    // Now ASN.1 encode ...
+
+    *siglen = i2d_ECDSA_SIG(der_sig, &sig);
+
     return 1;
 }
 
@@ -97,13 +100,13 @@ static int pkey_sm2_verify(EVP_PKEY_CTX *ctx,
                           const unsigned char *tbs, size_t tbslen)
 {
     int ret, type;
-    EC_PKEY_CTX *dctx = ctx->data;
+    SM2_PKEY_CTX *dctx = ctx->data;
     EC_KEY *ec = ctx->pkey->pkey.ec;
 
     if (dctx->md)
         type = EVP_MD_type(dctx->md);
     else
-        type = NID_sha1;
+        type = NID_sm3;
 
     ret = ECDSA_verify(type, tbs, tbslen, sig, siglen, ec);
 
@@ -112,7 +115,7 @@ static int pkey_sm2_verify(EVP_PKEY_CTX *ctx,
 
 static int pkey_sm2_ctrl(EVP_PKEY_CTX *ctx, int type, int p1, void *p2)
 {
-    EC_PKEY_CTX *dctx = ctx->data;
+    SM2_PKEY_CTX *dctx = ctx->data;
     EC_GROUP *group;
     switch (type) {
     case EVP_PKEY_CTRL_EC_PARAMGEN_CURVE_NID:
@@ -125,32 +128,28 @@ static int pkey_sm2_ctrl(EVP_PKEY_CTX *ctx, int type, int p1, void *p2)
         dctx->gen_group = group;
         return 1;
 
-    case EVP_PKEY_CTRL_EC_PARAM_ENC:
-        if (!dctx->gen_group) {
-            ECerr(EC_F_PKEY_SM2_CTRL, EC_R_NO_PARAMETERS_SET);
-            return 0;
-        }
-        EC_GROUP_set_asn1_flag(dctx->gen_group, p1);
+    case EVP_PKEY_CTRL_SET_USERID:
+        free(dctx->user_id);
+        dctx->user_id = OPENSSL_strdup((const char*)p2);
         return 1;
 
     case EVP_PKEY_CTRL_MD:
-        if (EVP_MD_type((const EVP_MD *)p2) != NID_sha1 &&
-            EVP_MD_type((const EVP_MD *)p2) != NID_ecdsa_with_SHA1 &&
-            EVP_MD_type((const EVP_MD *)p2) != NID_sha224 &&
-            EVP_MD_type((const EVP_MD *)p2) != NID_sha256 &&
-            EVP_MD_type((const EVP_MD *)p2) != NID_sha384 &&
-            EVP_MD_type((const EVP_MD *)p2) != NID_sha512) {
+        {
+        int md_type = EVP_MD_type((const EVP_MD *)p2);
+        if (md_type != NID_sm3 &&
+            md_type != NID_sha256 &&
+            md_type != NID_sha512_256) {
             ECerr(EC_F_PKEY_SM2_CTRL, EC_R_INVALID_DIGEST_TYPE);
             return 0;
         }
         dctx->md = p2;
         return 1;
+        }
 
     case EVP_PKEY_CTRL_GET_MD:
         *(const EVP_MD **)p2 = dctx->md;
         return 1;
 
-    case EVP_PKEY_CTRL_PEER_KEY:
         /* Default behaviour is OK */
     case EVP_PKEY_CTRL_DIGESTINIT:
     case EVP_PKEY_CTRL_PKCS7_SIGN:
@@ -187,26 +186,18 @@ static int pkey_sm2_ctrl_str(EVP_PKEY_CTX *ctx,
         else
             return -2;
         return EVP_PKEY_CTX_set_ec_param_enc(ctx, param_enc);
-    } else if (strcmp(type, "ecdh_kdf_md") == 0) {
-        const EVP_MD *md;
-        if ((md = EVP_get_digestbyname(value)) == NULL) {
-            ECerr(EC_F_PKEY_SM2_CTRL_STR, EC_R_INVALID_DIGEST);
-            return 0;
-        }
-        return EVP_PKEY_CTX_set_ecdh_kdf_md(ctx, md);
-    } else if (strcmp(type, "ecdh_cofactor_mode") == 0) {
-        int co_mode;
-        co_mode = atoi(value);
-        return EVP_PKEY_CTX_set_ecdh_cofactor_mode(ctx, co_mode);
+    } else if(strcmp(type, "user_id") == 0) {
+        SM2_PKEY_CTX *dctx = ctx->data;
+        free(dctx->user_id);
+        dctx->user_id = OPENSSL_strdup(value);
     }
-
     return -2;
 }
 
 static int pkey_sm2_paramgen(EVP_PKEY_CTX *ctx, EVP_PKEY *pkey)
 {
     EC_KEY *ec = NULL;
-    EC_PKEY_CTX *dctx = ctx->data;
+    SM2_PKEY_CTX *dctx = ctx->data;
     int ret = 0;
     if (dctx->gen_group == NULL) {
         ECerr(EC_F_PKEY_SM2_PARAMGEN, EC_R_NO_PARAMETERS_SET);
@@ -226,7 +217,7 @@ static int pkey_sm2_paramgen(EVP_PKEY_CTX *ctx, EVP_PKEY *pkey)
 static int pkey_sm2_keygen(EVP_PKEY_CTX *ctx, EVP_PKEY *pkey)
 {
     EC_KEY *ec = NULL;
-    EC_PKEY_CTX *dctx = ctx->data;
+    SM2_PKEY_CTX *dctx = ctx->data;
     if (ctx->pkey == NULL && dctx->gen_group == NULL) {
         ECerr(EC_F_PKEY_SM2_KEYGEN, EC_R_NO_PARAMETERS_SET);
         return 0;

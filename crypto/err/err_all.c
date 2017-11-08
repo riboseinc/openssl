@@ -93,7 +93,6 @@ int err_load_crypto_strings_int(void)
         ERR_load_ASYNC_strings() == 0 ||
 #endif
         ERR_load_KDF_strings() == 0 ||
-        ERR_load_SM2_strings() == 0 ||
         ERR_load_OSSL_STORE_strings() == 0)
         return 0;
 

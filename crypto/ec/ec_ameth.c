@@ -571,6 +571,46 @@ const EVP_PKEY_ASN1_METHOD eckey_asn1_meth = {
     ec_pkey_check
 };
 
+#if !defined(OPENSSL_NO_SM2)
+const EVP_PKEY_ASN1_METHOD sm2_asn1_meth = {
+    EVP_PKEY_SM2,
+    EVP_PKEY_SM2,
+    0,
+    "SM2",
+    "OpenSSL SM2 algorithm",
+
+    eckey_pub_decode,
+    eckey_pub_encode,
+    eckey_pub_cmp,
+    eckey_pub_print,
+
+    eckey_priv_decode,
+    eckey_priv_encode,
+    eckey_priv_print,
+
+    int_ec_size,
+    ec_bits,
+    ec_security_bits,
+
+    eckey_param_decode,
+    eckey_param_encode,
+    ec_missing_parameters,
+    ec_copy_parameters,
+    ec_cmp_parameters,
+    eckey_param_print,
+    0,
+
+    int_ec_free,
+    ec_pkey_ctrl,
+    old_ec_priv_decode,
+    old_ec_priv_encode,
+
+    0, 0, 0,
+
+    ec_pkey_check
+};
+#endif
+
 int EC_KEY_print(BIO *bp, const EC_KEY *x, int off)
 {
     int private = EC_KEY_get0_private_key(x) != NULL;

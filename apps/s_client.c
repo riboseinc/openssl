@@ -198,7 +198,7 @@ static int psk_use_session_cb(SSL *s, const EVP_MD *md,
 
         if (key_len == EVP_MD_size(EVP_sha256()))
             cipher = SSL_CIPHER_find(s, tls13_aes128gcmsha256_id);
-        else if(key_len == EVP_MD_size(EVP_sha384()))
+        else if (key_len == EVP_MD_size(EVP_sha384()))
             cipher = SSL_CIPHER_find(s, tls13_aes256gcmsha384_id);
 
         if (cipher == NULL) {
@@ -417,10 +417,11 @@ static int serverinfo_cli_parse_cb(SSL *s, unsigned int ext_type,
     unsigned char ext_buf[4 + 65536];
 
     /* Reconstruct the type/len fields prior to extension data */
-    ext_buf[0] = ext_type >> 8;
-    ext_buf[1] = ext_type & 0xFF;
-    ext_buf[2] = inlen >> 8;
-    ext_buf[3] = inlen & 0xFF;
+    inlen &= 0xffff; /* for formal memcmpy correctness */
+    ext_buf[0] = (unsigned char)(ext_type >> 8);
+    ext_buf[1] = (unsigned char)(ext_type);
+    ext_buf[2] = (unsigned char)(inlen >> 8);
+    ext_buf[3] = (unsigned char)(inlen);
     memcpy(ext_buf + 4, in, inlen);
 
     BIO_snprintf(pem_name, sizeof(pem_name), "SERVERINFO FOR EXTENSION %d",
@@ -918,7 +919,7 @@ int s_client_main(int argc, char **argv)
 #if defined(OPENSSL_SYS_WINDOWS) || defined(OPENSSL_SYS_MSDOS)
     struct timeval tv;
 #endif
-    char *servername = NULL;
+    const char *servername = NULL;
     int noservername = 0;
     const char *alpn_in = NULL;
     tlsextctx tlsextcbp = { NULL, 0 };
@@ -1924,16 +1925,9 @@ int s_client_main(int argc, char **argv)
         }
         /* By default the SNI should be the same as was set in the session */
         if (!noservername && servername == NULL) {
-            const char *sni = SSL_SESSION_get0_hostname(sess);
+            servername = SSL_SESSION_get0_hostname(sess);
 
-            if (sni != NULL) {
-                servername = OPENSSL_strdup(sni);
-                if (servername == NULL) {
-                    BIO_printf(bio_err, "Can't set server name\n");
-                    ERR_print_errors(bio_err);
-                    goto end;
-                }
-            } else {
+            if (servername == NULL) {
                 /*
                  * Force no SNI to be sent so we are consistent with the
                  * session.
